@@ -1,0 +1,5 @@
+- hosts: Host.name
+  user: #User with sudo access
+  become: yes
+  roles:
+          - config
