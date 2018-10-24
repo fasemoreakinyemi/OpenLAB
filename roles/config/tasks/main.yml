@@ -1,0 +1,62 @@
+---
+# tasks file for config
+- name: Create user openbis
+  user:
+          name: openbis
+          password: "{{ 'mysecretpass' | password_hash('sha512') }}"
+          groups: sudo
+          state: present
+          shell: /bin/bash
+          createhome: yes
+          home: /home/openbis
+  become: yes
+  become_user: root
+- name: Copy SSH key to openbis #Optional but might be necessary for easy access to server
+  authorized_key:
+          user: openbis
+          state: present
+          key: "{{ lookup('file', '/path/to/.ssh/id_rsa.pub') }}"
+  become: yes
+  become_user: root
+
+- name: Download Anaconda
+  get_url:
+          url: https://repo.anaconda.com/archive/Anaconda3-5.3.0-Linux-x86_64.sh
+          dest: /home/openbis
+  notify:
+          - Install Anaconda #Look up handler if you want to edit this task
+# Important for installing build requirement JDK8
+- name: Add third party ppa
+  apt_repository:
+          repo: ppa:webupd8team/java
+  become: yes
+  become_user: root
+# I will advise to change user to openbis before you install dependecies then afterwards remove from sudo list before you install openbis
+- name: Install dependencies
+  apt:
+          update_cache: yes
+          name: ['apache2', 'openjdk-8-jre-headless', 'postgresql-10', 'oracle-java8-installer', 'oracle-java8-set-default', 'libpq-dev', 'python-psycopg2']
+          state: installed
+  become: yes
+  become_user: root
+- name: Clone openBis from Gitlab
+  git:
+          repo: 'https://sissource.ethz.ch/sispub/openbis.git'
+          clone: yes
+          dest: /home/openbis/openbis_source
+- name: Build openbis1
+  command: chdir=/home/openbis/openbis_source/installation ./gradlew clean
+- name: Build openbis2
+  command: chdir=/home/openbis/openbis_source/installation ./gradlew build -x test
+- name: Create openbis user
+  postgresql_user:
+          name: openbis
+  become_user: postgres
+  become: yes
+- name: Move build to home directory
+  command: mv /home/openbis/openbis_source/installation/targets/gradle/distributions/openBIS-installation-standard-technologies-SNAPSHOT-r1540209625.tar.gz /home/openbis
+- name: Extract openbis
+  command: tar xzvf openBIS-installation-standard-technologies-SNAPSHOT-r1540209625.tar.gz # unarchive module as alternative
+# Before you run this task please read the openbis installation guide
+- name: Install openbis
+  command: chdir=/home/openbis/openBIS-installation-standard-technologies-SNAPSHOT-r1540209625 ./run-console.sh
